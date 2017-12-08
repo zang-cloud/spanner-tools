@@ -2,7 +2,6 @@ package spantool
 
 import (
 	"cloud.google.com/go/spanner"
-	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/go-errors/errors"
 	"os"
@@ -54,8 +53,6 @@ func (logger LoggerDatadog) log(spannerClient *spanner.Client) {
 				Elem().
 				FieldByName("queue").
 				FieldByName("sessions")
-
-			fmt.Println("Sessions:", v.Len())
 
 			logger.stats.Gauge("sessions", float64(v.Len()), nil, 1) // TODO: what should the val of rate be?
 		}
