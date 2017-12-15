@@ -2,6 +2,7 @@ package spantool
 
 import (
 	"cloud.google.com/go/spanner"
+	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/go-errors/errors"
 	"os"
@@ -11,7 +12,7 @@ import (
 
 type Logger interface {
 	init() error
-	log(*spanner.Client)
+	log(func() float64)
 }
 
 type LoggerDatadog struct {
@@ -43,18 +44,26 @@ func (logger LoggerDatadog) init() error {
 	return nil
 }
 
-func (logger LoggerDatadog) log(spannerClient *spanner.Client) {
+func (logger LoggerDatadog) log(sessionsCount func() float64) {
 	go func() {
 		for _ = range time.Tick(logger.PollingDuration) {
-			v := reflect.ValueOf(*spannerClient).
-				FieldByName("idleSessions").
-				Elem().
-				FieldByName("hc").
-				Elem().
-				FieldByName("queue").
-				FieldByName("sessions")
+			logger.stats.Gauge("sessions", sessionsCount(), nil, 1) // TODO: what should the val of rate be?
+		}
+	}()
+}
 
-			logger.stats.Gauge("sessions", float64(v.Len()), nil, 1) // TODO: what should the val of rate be?
+type LoggerStdout struct {
+	PollingDuration time.Duration
+}
+
+func (logger LoggerStdout) init() error {
+	return nil
+}
+
+func (logger LoggerStdout) log(sessionsCount func() float64) {
+	go func() {
+		for _ = range time.Tick(logger.PollingDuration) {
+			fmt.Println("Sessions count is", sessionsCount())
 		}
 	}()
 }
@@ -64,7 +73,18 @@ func LogSessionsCount(spannerClient *spanner.Client, logger Logger) error {
 		return errors.Wrap(err, 0)
 	}
 
-	logger.log(spannerClient)
+	sessionsCount := func() float64 {
+		count := reflect.ValueOf(*spannerClient).
+			FieldByName("idleSessions").
+			Elem().
+			FieldByName("hc").
+			Elem().
+			FieldByName("queue").
+			FieldByName("sessions")
+		return float64(count.Len())
+	}
+
+	logger.log(sessionsCount)
 
 	return nil
 }
