@@ -68,23 +68,25 @@ func (logger LoggerStdout) log(sessionsCount func() float64) {
 	}()
 }
 
-func LogSessionsCount(spannerClient *spanner.Client, logger Logger) error {
-	if err := logger.init(); err != nil {
-		return errors.Wrap(err, 0)
-	}
+func LogSessionsCount(spannerClient *spanner.Client, loggers ...Logger) error {
+	for _, logger := range loggers {
+		if err := logger.init(); err != nil {
+			return errors.Wrap(err, 0)
+		}
 
-	sessionsCount := func() float64 {
-		count := reflect.ValueOf(*spannerClient).
-			FieldByName("idleSessions").
-			Elem().
-			FieldByName("hc").
-			Elem().
-			FieldByName("queue").
-			FieldByName("sessions")
-		return float64(count.Len())
-	}
+		sessionsCount := func() float64 {
+			count := reflect.ValueOf(*spannerClient).
+				FieldByName("idleSessions").
+				Elem().
+				FieldByName("hc").
+				Elem().
+				FieldByName("queue").
+				FieldByName("sessions")
+			return float64(count.Len())
+		}
 
-	logger.log(sessionsCount)
+		logger.log(sessionsCount)
+	}
 
 	return nil
 }
