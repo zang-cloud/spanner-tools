@@ -10,9 +10,37 @@ import (
 	"time"
 )
 
+func SessionsCount(spannerClient *spanner.Client) float64 {
+	count := reflect.ValueOf(*spannerClient).
+		FieldByName("idleSessions").
+		Elem().
+		FieldByName("hc").
+		Elem().
+		FieldByName("queue").
+		FieldByName("sessions").
+		Len()
+	return float64(count)
+}
+
 type Logger interface {
 	init() error
 	log(func() float64)
+}
+
+type LoggerStdout struct {
+	PollingDuration time.Duration
+}
+
+func (logger LoggerStdout) init() error {
+	return nil
+}
+
+func (logger LoggerStdout) log(sessionsCount func() float64) {
+	go func() {
+		for _ = range time.Tick(logger.PollingDuration) {
+			fmt.Println("Sessions count is", sessionsCount())
+		}
+	}()
 }
 
 type LoggerDatadog struct {
@@ -52,37 +80,14 @@ func (logger LoggerDatadog) log(sessionsCount func() float64) {
 	}()
 }
 
-type LoggerStdout struct {
-	PollingDuration time.Duration
-}
-
-func (logger LoggerStdout) init() error {
-	return nil
-}
-
-func (logger LoggerStdout) log(sessionsCount func() float64) {
-	go func() {
-		for _ = range time.Tick(logger.PollingDuration) {
-			fmt.Println("Sessions count is", sessionsCount())
-		}
-	}()
-}
-
 func LogSessionsCount(spannerClient *spanner.Client, loggers ...Logger) error {
+	sessionsCount := func() float64 {
+		return SessionsCount(spannerClient)
+	}
+
 	for _, logger := range loggers {
 		if err := logger.init(); err != nil {
 			return errors.Wrap(err, 0)
-		}
-
-		sessionsCount := func() float64 {
-			count := reflect.ValueOf(*spannerClient).
-				FieldByName("idleSessions").
-				Elem().
-				FieldByName("hc").
-				Elem().
-				FieldByName("queue").
-				FieldByName("sessions")
-			return float64(count.Len())
 		}
 
 		logger.log(sessionsCount)
